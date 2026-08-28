@@ -40,9 +40,11 @@ services:
     environment:
       POSTGRES_DB: brightbean
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # No published port: app/worker/migrate reach this over the internal
+    # Docker network by service name ("postgres"), nothing outside the
+    # compose stack needs to. Publishing 5432 to the host would put a
+    # database on the public IP behind whatever POSTGRES_PASSWORD is set to.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
