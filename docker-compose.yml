@@ -7,6 +7,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Coolify injects restart:unless-stopped onto every service by default
+    # unless overridden here. migrate is a one-shot job (exits 0 on success)
+    # — left to Coolify's default, it restarts forever after every successful
+    # exit, and that container-ID churn is what broke app/worker's
+    # depends_on: condition: service_completed_successfully (confirmed live:
+    # migrate was cycling exit-0 -> restart, deploy log showed "No such
+    # container" when compose polled a migrate container ID that had already
+    # been replaced by the next restart).
+    restart: "no"
 
   app:
     build: .
