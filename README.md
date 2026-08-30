@@ -79,6 +79,13 @@ A free hosted version is available at [brightbean.xyz/studio](https://brightbean
 | <img src="https://api.iconify.design/logos/google-icon.svg" width="16" height="16"> Google Business Profile | ✓ | — | — | ✓ |
 | <img src="https://cdn.simpleicons.org/mastodon" width="16" height="16"> Mastodon | ✓ | ✓ | — | — |
 | <img src="https://cdn.simpleicons.org/devdotto/000000" width="16" height="16"> DEV.to | ✓ | — | — | — |
+| <img src="https://cdn.simpleicons.org/x" width="16" height="16"> X | ✓* | — | — | ✓ |
+| <img src="https://cdn.simpleicons.org/reddit" width="16" height="16"> Reddit | ✓* | — | — | ✓ |
+| <img src="https://cdn.simpleicons.org/substack" width="16" height="16"> Substack † | ✓* | — | — | — |
+
+\* Text posts only — media publishing isn't implemented yet, see the [X](#x) / [Reddit](#reddit) / [Substack](#substack) sections below. X: new developer accounts are pay-per-use (no free tier). Reddit: free, but new OAuth app registration goes through a manual approval queue — see that section for details.
+
+† Substack runs on an **unofficial, undocumented API** — there is no first-party publish endpoint at all. See the [Substack](#substack) section before using this one.
 
 ---
 
@@ -580,6 +587,63 @@ No developer app registration needed. Users connect by entering a personal **API
 3. Copy the generated key and paste it when connecting your account in Brightbean Studio
 
 Posts publish as DEV.to articles (title + Markdown body). The key can be revoked at any time from the same settings page.
+
+### X
+
+> **Cost:** as of 2026, X has no free tier and new developer accounts can't sign up for the old flat-rate Basic/Pro plans — only pay-per-use, billed per post created (more if the post contains a link) and per post read. Check X's current developer pricing before connecting an account; posting volume translates directly into a bill.
+
+> **Media isn't supported yet.** This provider only publishes text posts. X's media upload is a separate, more involved flow (chunked upload with async processing for anything beyond a small image) that hasn't been built and verified against a live app yet — attaching media to a post raises an error rather than silently dropping it.
+
+1. Go to the [X Developer Portal](https://developer.x.com/) and create a Project + App. New accounts land on the pay-per-use plan — see the cost note above.
+2. Under your App's **User authentication settings**, enable OAuth 2.0 and set the app type to **Confidential client** (required — this provider authenticates the token exchange with a client secret).
+3. Add the redirect URI:
+   ```
+   {APP_URL}/social-accounts/callback/x/
+   ```
+4. Under **Keys and tokens**, copy the **Client ID** and **Client Secret** (OAuth 2.0 Client ID and Client Secret — not the API Key/Secret pair, which is for the older OAuth 1.0a flow this provider doesn't use).
+5. Required scopes (requested automatically): `tweet.read`, `tweet.write`, `users.read`, `offline.access`. `offline.access` is what gets you a refresh token — without it the connection expires in about 2 hours with no way to renew short of reconnecting.
+6. Set the environment variables:
+   ```
+   PLATFORM_X_CLIENT_ID=your-client-id
+   PLATFORM_X_CLIENT_SECRET=your-client-secret
+   ```
+
+### Reddit
+
+> **App approval:** Reddit closed self-service OAuth app registration in late 2025. New apps — free or commercial — now go through a manual approval ticket instead of instant signup, with no guaranteed turnaround. Apply before assuming this integration is ready to use.
+
+> **Media isn't supported yet.** This provider publishes self (text) and link posts only. Reddit's image/video upload is a separate media-lease-and-upload flow that hasn't been built and verified against a live app yet — attaching media to a post raises an error rather than silently dropping it.
+
+1. Go to Reddit's [app preferences](https://www.reddit.com/prefs/apps) page (or wherever the current Responsible Builder Policy approval flow directs you) and register a **web app** (confidential client, not "installed"/"script").
+2. Add the redirect URI:
+   ```
+   {APP_URL}/social-accounts/callback/reddit/
+   ```
+3. Copy the **Client ID** (under the app name) and **Client Secret**.
+4. Required scopes (requested automatically): `identity`, `submit`, `read`. The authorize URL also always requests `duration=permanent` — without it Reddit issues an access token with no refresh token, expiring in about an hour.
+5. Reddit requires every request to carry a descriptive `User-Agent` header identifying your app; a generic one gets aggressively rate-limited. A reasonable default is built in, but Reddit may ask you to make it unique to your deployment — set `PLATFORM_REDDIT_USER_AGENT` if so.
+6. Set the environment variables:
+   ```
+   PLATFORM_REDDIT_CLIENT_ID=your-client-id
+   PLATFORM_REDDIT_CLIENT_SECRET=your-client-secret
+   PLATFORM_REDDIT_USER_AGENT=web:your-app-name:v1.0 (by /u/your-username)
+   ```
+7. Posting requires a target subreddit per post — pass it as `subreddit` in the composer's platform-specific extra fields.
+
+### Substack
+
+> **This is not an official integration.** Substack's real 2026 Developer API only supports creator profile lookup — there is no first-party endpoint to publish a post. This provider talks to the same undocumented internal API (`https://<publication>.substack.com/api/v1/*`) Substack's own web editor uses, authenticated with your browser session cookie instead of OAuth, because there is no OAuth app to register. Substack can change or break this without notice, and it's tied to your actual Substack login rather than an app-scoped token — only connect an account you're comfortable with that risk on.
+
+> **Media isn't supported yet**, same reasoning as X and Reddit above.
+
+There's no app registration step — connect directly from Studio's "Connect a Platform" page:
+
+1. Log into Substack in your browser, on the publication you want to post to.
+2. Open DevTools → Application (Chrome) or Storage (Firefox) → Cookies, and copy the value of the `connect.sid` cookie.
+3. In Studio, choose **Connect → Substack**, and enter your publication's URL (e.g. `https://yourname.substack.com`) and the cookie value.
+4. The connection lasts as long as that browser session does — once it expires or you log out elsewhere, reconnect with a fresh cookie value.
+
+No environment variables apply here — there's no app-level credential, only the per-account publication URL and cookie entered above.
 
 ## Inbox: Backfill Historical Messages
 

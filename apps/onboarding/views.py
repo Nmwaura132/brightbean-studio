@@ -300,11 +300,12 @@ def connection_oauth_start(request, token):
     if platform not in configured_platforms:
         return redirect("onboarding:connection_page", token=token)
 
-    # Bluesky and Mastodon use their own forms on the connection page
+    # Bluesky, Mastodon and Substack use their own forms on the connection page
     # (not standard OAuth via this endpoint), so reject them here.
     if platform in (
         PlatformCredential.Platform.BLUESKY,
         PlatformCredential.Platform.MASTODON,
+        PlatformCredential.Platform.SUBSTACK,
     ):
         return redirect("onboarding:connection_page", token=token)
 

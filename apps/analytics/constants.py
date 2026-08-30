@@ -21,4 +21,10 @@ NO_ANALYTICS_PLATFORMS: dict[str, str] = {
     # AnalyticsPlatformConfig: a missing config row now reads as *enabled*, and
     # this is a capability gap, not an admin decision.
     "devto": ("Publishing to DEV.to is supported, but its analytics aren't wired up yet."),
+    # XProvider/RedditProvider implement per-post metrics but not account-level
+    # metrics (no account-analytics endpoint requested/available); SubstackProvider
+    # implements neither. All three would hit SocialProvider's NotImplementedError.
+    "x": ("X account-level analytics aren't implemented yet. Per-post metrics still work."),
+    "reddit": ("Reddit has no account-level analytics for a connected user. Per-post metrics still work."),
+    "substack": ("Publishing to Substack is supported, but its analytics aren't wired up yet."),
 }

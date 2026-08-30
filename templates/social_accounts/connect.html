@@ -33,6 +33,9 @@
                     {% elif value == 'google_business' %}bg-blue-50 text-blue-500
                     {% elif value == 'mastodon' %}bg-indigo-50 text-indigo-600
                     {% elif value == 'devto' %}bg-stone-100 text-stone-900
+                    {% elif value == 'x' %}bg-stone-100 text-stone-900
+                    {% elif value == 'reddit' %}bg-orange-50 text-orange-600
+                    {% elif value == 'substack' %}bg-orange-50 text-orange-600
                     {% endif %}">
                     {% include "social_accounts/partials/_platform_icon.html" with platform=value size="5" %}
                 </div>
@@ -53,6 +56,9 @@
                         {% elif value == 'google_business' %}Local posts
                         {% elif value == 'mastodon' %}Federated social
                         {% elif value == 'devto' %}Articles &amp; posts
+                        {% elif value == 'x' %}Text posts only, no media yet
+                        {% elif value == 'reddit' %}Self &amp; link posts, no media yet
+                        {% elif value == 'substack' %}Unofficial API &middot; session cookie required
                         {% endif %}
                     </p>
                 </div>

@@ -19,8 +19,11 @@ from .linkedin_company import LinkedInCompanyProvider
 from .linkedin_personal import LinkedInPersonalProvider
 from .mastodon import MastodonProvider
 from .pinterest import PinterestProvider
+from .reddit import RedditProvider
+from .substack import SubstackProvider
 from .threads import ThreadsProvider
 from .tiktok import TikTokProvider
+from .x import XProvider
 from .youtube import YouTubeProvider
 
 if TYPE_CHECKING:
@@ -40,6 +43,9 @@ PROVIDER_REGISTRY: dict[str, type[SocialProvider]] = {
     "google_business": GoogleBusinessProvider,
     "mastodon": MastodonProvider,
     "devto": DevtoProvider,
+    "x": XProvider,
+    "reddit": RedditProvider,
+    "substack": SubstackProvider,
 }
 
 # Characters a platform escapes in the caption it publishes. Each one costs two

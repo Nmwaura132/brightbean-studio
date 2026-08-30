@@ -31,6 +31,11 @@ urlpatterns = [
         views.connect_devto,
         name="connect_devto",
     ),
+    path(
+        "<uuid:workspace_id>/connect/substack/",
+        views.connect_substack,
+        name="connect_substack",
+    ),
     # OAuth callback (not workspace-scoped - platform redirects here)
     path(
         "callback/<str:platform>/",

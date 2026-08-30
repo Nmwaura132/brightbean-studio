@@ -452,6 +452,22 @@ PLATFORM_CREDENTIALS_FROM_ENV = {
     # DEV.to - per-account API key (no OAuth). The key is supplied by the user
     # at connect time, so no app-level credentials apply (same as Bluesky).
     "devto": {},
+    "x": {
+        "client_id": env("PLATFORM_X_CLIENT_ID", default=""),
+        "client_secret": env("PLATFORM_X_CLIENT_SECRET", default=""),
+    },
+    "reddit": {
+        "client_id": env("PLATFORM_REDDIT_CLIENT_ID", default=""),
+        "client_secret": env("PLATFORM_REDDIT_CLIENT_SECRET", default=""),
+        # Optional: Reddit wants a descriptive User-Agent identifying this
+        # specific deployment. providers/reddit.py falls back to a generic
+        # default when unset. See README "Reddit" section.
+        "user_agent": env("PLATFORM_REDDIT_USER_AGENT", default=""),
+    },
+    # Substack - no OAuth app exists to register (see providers/substack.py).
+    # The operator supplies a publication URL + session cookie per account at
+    # connect time, same as Bluesky's app password.
+    "substack": {},
 }
 
 # Publishing engine

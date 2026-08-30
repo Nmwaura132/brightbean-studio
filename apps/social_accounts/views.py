@@ -258,6 +258,8 @@ def connect_platform(request, workspace_id):
         return redirect("social_accounts:connect_mastodon", workspace_id=workspace_id)
     if platform == PlatformCredential.Platform.DEVTO:
         return redirect("social_accounts:connect_devto", workspace_id=workspace_id)
+    if platform == PlatformCredential.Platform.SUBSTACK:
+        return redirect("social_accounts:connect_substack", workspace_id=workspace_id)
 
     # Standard OAuth flow
     provider = _get_provider_for_platform(platform, request.org.id)
@@ -620,6 +622,60 @@ def connect_devto(request, workspace_id):
     return redirect("calendar:calendar", workspace_id=workspace_id)
 
 
+def connect_substack(request, workspace_id):
+    """Connect a Substack account via publication URL + session cookie.
+
+    Substack has no OAuth app to register (see providers/substack.py) — the
+    operator pastes their own browser session cookie directly, same shape as
+    the DEV.to API-key flow above but with an added per-account
+    ``publication_url`` (stored as ``instance_url``, same field Mastodon/
+    Bluesky use for their own per-account instance metadata).
+    """
+    if request.method == "GET":
+        return render(
+            request,
+            "social_accounts/substack_connect.html",
+            {"workspace_id": workspace_id},
+        )
+
+    publication_url = request.POST.get("publication_url", "").strip().rstrip("/")
+    session_cookie = request.POST.get("session_cookie", "").strip()
+
+    if not publication_url or not session_cookie:
+        messages.error(request, "Publication URL and session cookie are required.")
+        return render(
+            request,
+            "social_accounts/substack_connect.html",
+            {"workspace_id": workspace_id},
+        )
+
+    try:
+        provider = _get_provider_for_platform(
+            PlatformCredential.Platform.SUBSTACK,
+            request.org.id,
+            publication_url=publication_url,
+        )
+        profile = provider.get_profile(session_cookie)
+        _create_or_update_account(
+            workspace_id=workspace_id,
+            platform=PlatformCredential.Platform.SUBSTACK,
+            profile=profile,
+            access_token=session_cookie,
+            instance_url=provider.publication_url,
+        )
+        messages.success(request, f"Connected {profile.name} on Substack.")
+    except Exception:
+        logger.exception("Substack connection failed")
+        messages.error(
+            request,
+            "Failed to connect Substack account. Check your publication URL and "
+            "session cookie — Substack's unofficial API may also have changed; see the README.",
+        )
+        return render(request, "social_accounts/substack_connect.html", {"workspace_id": workspace_id})
+
+    return redirect("calendar:calendar", workspace_id=workspace_id)
+
+
 # ------------------------------------------------------------------
 # Mastodon Connect (instance-based OAuth)
 # ------------------------------------------------------------------
@@ -737,6 +793,8 @@ def reconnect(request, workspace_id, account_id):
         return redirect("social_accounts:connect_mastodon", workspace_id=workspace_id)
     if platform == PlatformCredential.Platform.DEVTO:
         return redirect("social_accounts:connect_devto", workspace_id=workspace_id)
+    if platform == PlatformCredential.Platform.SUBSTACK:
+        return redirect("social_accounts:connect_substack", workspace_id=workspace_id)
 
     # Standard OAuth reconnect
     provider = _get_provider_for_platform(platform, request.org.id)

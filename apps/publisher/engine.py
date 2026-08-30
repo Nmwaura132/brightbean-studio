@@ -92,6 +92,16 @@ def _resolve_publish_credentials(account):
                 "Bluesky PDS URL failed SSRF check for account %s",
                 account.id,
             )
+    elif platform == "substack" and account.instance_url:
+        from apps.common.validators import is_safe_url
+
+        if is_safe_url(account.instance_url):
+            credentials["publication_url"] = account.instance_url
+        else:
+            logger.warning(
+                "Substack publication URL failed SSRF check for account %s",
+                account.id,
+            )
     elif platform == "facebook":
         credentials["page_id"] = account.account_platform_id
     elif platform in ("instagram", "instagram_login"):

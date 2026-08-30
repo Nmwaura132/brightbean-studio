@@ -16,6 +16,8 @@ _KEY_HINTS = {
     "google_business": "client_id, client_secret (optional: account_id, location_id)",
     "linkedin_personal": "client_id, client_secret (optional: _oauth_mode = oidc | community_management)",
     "linkedin_company": "client_id, client_secret",
+    "x": "client_id, client_secret",
+    "reddit": "client_id, client_secret (optional: user_agent)",
 }
 
 CREDENTIALS_HELP = mark_safe(
