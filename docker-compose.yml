@@ -22,7 +22,10 @@ services:
     volumes:
       - media_data:/app/media
     ports:
-      - "8000:8000"
+      # Host port 8000 is Coolify's own dashboard (confirmed: 0.0.0.0:8000
+      # is already bound to it). nse-api/nse-api-staging already avoid this
+      # the same way, mapping to 8001/8002 — 8003 is the next free one.
+      - "8003:8000"
     env_file:
       - .env
     depends_on:
