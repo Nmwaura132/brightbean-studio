@@ -51,31 +51,27 @@ class TestHeaders:
 
 
 class TestGetProfile:
-    @patch.object(SubstackProvider, "_request")
-    def test_parses_publication_info(self, mock_request):
-        mock_request.return_value = _make_response(
-            {
-                "publication": {
-                    "id": 42,
-                    "name": "My Newsletter",
-                    "subdomain": "example",
-                    "logo_url": "https://x/logo.png",
-                }
-            }
-        )
+    PUBLICATION = {"id": 42, "name": "My Newsletter", "subdomain": "example", "logo_url": "https://x/logo.png"}
 
-        profile = _provider().get_profile(TOKEN)
-
-        assert profile.platform_id == "42"
-        assert profile.name == "My Newsletter"
-        assert profile.handle == "example"
+    def _profile(self, mock_request, member_pub_id):
+        mock_request.side_effect = [
+            _make_response(self.PUBLICATION),
+            _make_response({"id": 7, "publicationUsers": [{"publication": {"id": member_pub_id}, "role": "admin"}]}),
+        ]
+        return _provider().get_profile(TOKEN)
 
     @patch.object(SubstackProvider, "_request")
-    def test_raises_when_no_publication_in_response(self, mock_request):
-        mock_request.return_value = _make_response({})
+    def test_uses_publication_id_as_platform_id(self, mock_request):
+        assert self._profile(mock_request, member_pub_id=42).platform_id == "42"
 
+    @patch.object(SubstackProvider, "_request")
+    def test_uses_publication_name(self, mock_request):
+        assert self._profile(mock_request, member_pub_id=42).name == "My Newsletter"
+
+    @patch.object(SubstackProvider, "_request")
+    def test_raises_when_cookie_owner_is_not_a_member(self, mock_request):
         with pytest.raises(OAuthError):
-            _provider().get_profile(TOKEN)
+            self._profile(mock_request, member_pub_id=99)
 
     def test_raises_when_publication_url_not_configured(self):
         provider = SubstackProvider({})

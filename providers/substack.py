@@ -146,19 +146,21 @@ class SubstackProvider(SocialProvider):
 
     def get_profile(self, access_token: str) -> AccountProfile:
         publication_url = self._require_publication_url()
-        resp = self._request(
-            "GET",
-            f"{publication_url}/api/v1/subscription",
-            headers=self._headers(access_token),
-        )
-        body = resp.json()
-        publication = body.get("publication", {}) or {}
-        if not publication:
+        headers = self._headers(access_token)
+        # /publication is public, so it identifies the publication but proves nothing
+        # about the cookie; membership in the cookie owner's publicationUsers does.
+        publication = self._request("GET", f"{publication_url}/api/v1/publication", headers=headers).json()
+        me = self._request("GET", "https://substack.com/api/v1/user/profile/self", headers=headers).json()
+        member_pub_ids = {(pu.get("publication") or {}).get("id") for pu in me.get("publicationUsers") or []}
+        if not publication.get("id") or publication["id"] not in member_pub_ids:
             raise OAuthError(
-                "Substack session cookie did not resolve to a publication — it may be "
+                "Substack session cookie did not resolve to a member of this publication — it may be "
                 "expired, or this account isn't associated with the configured publication_url.",
                 platform=self.platform_name,
-                raw_response=body,
+                raw_response={
+                    "publication": publication,
+                    "member_publication_ids": sorted(filter(None, member_pub_ids)),
+                },
             )
         return AccountProfile(
             platform_id=str(publication.get("id", "")),
