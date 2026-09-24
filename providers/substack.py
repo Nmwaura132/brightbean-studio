@@ -4,19 +4,19 @@ Substack's own 2026 Developer API (see README) only does creator profile
 lookup; there is no first-party endpoint to publish a post. Everything below
 talks to the same internal JSON API (``https://<publication>.substack.com/api/v1/*``)
 the Substack web editor itself uses, authenticated with the operator's own
-browser session cookies (``substack.sid`` and ``connect.sid``) instead of
-OAuth — there is no OAuth app to register because Substack doesn't offer one.
+browser session cookie (``substack.sid``, the account's access_token) instead
+of OAuth — there is no OAuth app to register because Substack doesn't offer one.
+``substack.sid`` alone authenticates (verified live); ``connect.sid`` isn't needed.
 
 This is real risk, not a formality: Substack can change or break these
 endpoints without notice, and it's tied to a real person's actual account, not
-an app-scoped token. Request shapes (both cookies, JSON-string ``draft_body``,
-required ``draft_bylines``) follow jakub-k-slys/substack-gateway-oss, which is
+an app-scoped token. Draft shapes (JSON-string ``draft_body``, required
+``draft_bylines``) follow jakub-k-slys/substack-gateway-oss, which is
 e2e-tested against live Substack; the immediate ``/publish`` call is not
 covered by that project, so treat the first real publish as its real test.
 
 Auth type is SESSION, matching Bluesky/DEV.to: no ``get_auth_url`` /
-``exchange_code`` — the operator pastes their session cookies directly. The
-account's access_token holds both as JSON: ``{"substack_sid": ..., "connect_sid": ...}``.
+``exchange_code`` — the operator pastes their session cookie directly.
 """
 
 from __future__ import annotations
@@ -116,20 +116,20 @@ class SubstackProvider(SocialProvider):
         # than passed as `access_token=` to `_request` so the base class
         # doesn't also attach an `Authorization: Bearer` header Substack
         # doesn't expect.
-        cookies = json.loads(access_token)
-        return {"Cookie": f"substack.sid={cookies['substack_sid']}; connect.sid={cookies['connect_sid']}"}
+        return {"Cookie": f"substack.sid={access_token}"}
 
     def _get_own_user_id(self, headers: dict[str, str]) -> int:
-        resp = self._request("GET", "https://substack.com/api/v1/user-settings", headers=headers)
+        # /user-settings can return an empty list for a valid session (seen live
+        # on an account with no publication yet); /user/profile/self always has the id.
+        resp = self._request("GET", "https://substack.com/api/v1/user/profile/self", headers=headers)
         body = resp.json()
-        settings = body.get("userSettings") or body.get("user_settings") or []
-        if not settings:
+        if not body.get("id"):
             raise PublishError(
-                "Substack returned no user settings — the session cookies may have expired.",
+                "Substack returned no user id — the substack.sid cookie may have expired.",
                 platform=self.platform_name,
                 raw_response=body,
             )
-        return settings[0]["user_id"]
+        return body["id"]
 
     def _require_publication_url(self) -> str:
         if not self.publication_url:

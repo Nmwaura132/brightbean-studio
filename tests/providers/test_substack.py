@@ -20,7 +20,7 @@ def _provider(publication_url="https://example.substack.com") -> SubstackProvide
     return SubstackProvider({"publication_url": publication_url})
 
 
-TOKEN = json.dumps({"substack_sid": "s%3Asub", "connect_sid": "s%3Acon"})
+TOKEN = "s%3Asub"
 
 
 class TestTextToDoc:
@@ -44,10 +44,10 @@ class TestOAuthStubs:
 
 
 class TestHeaders:
-    def test_sends_both_session_cookies_not_bearer(self):
+    def test_sends_substack_sid_cookie_not_bearer(self):
         headers = _provider()._headers(TOKEN)
 
-        assert headers == {"Cookie": "substack.sid=s%3Asub; connect.sid=s%3Acon"}
+        assert headers == {"Cookie": "substack.sid=s%3Asub"}
 
 
 class TestGetProfile:
@@ -87,7 +87,7 @@ class TestGetProfile:
 class TestPublishPost:
     def _publish(self, mock_request):
         mock_request.side_effect = [
-            _make_response({"userSettings": [{"user_id": 7, "type": "x"}]}),
+            _make_response({"id": 7, "handle": "me"}),
             _make_response({"id": 999}),
             _make_response({"id": 999, "canonical_url": "https://example.substack.com/p/my-post"}),
         ]
@@ -121,11 +121,11 @@ class TestPublishPost:
         assert json.loads(draft_payload["draft_body"])["type"] == "doc"
 
     @patch.object(SubstackProvider, "_request")
-    def test_raises_when_user_settings_empty(self, mock_request):
-        mock_request.return_value = _make_response({"userSettings": []})
+    def test_raises_when_profile_has_no_user_id(self, mock_request):
+        mock_request.return_value = _make_response({})
         content = PublishContent(title="t", text="body", post_type=PostType.ARTICLE)
 
-        with pytest.raises(PublishError, match="user settings"):
+        with pytest.raises(PublishError, match="user id"):
             _provider().publish_post(TOKEN, content)
 
     def test_requires_title(self):
