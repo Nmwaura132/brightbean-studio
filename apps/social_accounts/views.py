@@ -3,6 +3,7 @@
 Handles OAuth flows, account listing, connect/reconnect/disconnect actions.
 """
 
+import json
 import logging
 import secrets
 from datetime import timedelta
@@ -639,10 +640,11 @@ def connect_substack(request, workspace_id):
         )
 
     publication_url = request.POST.get("publication_url", "").strip().rstrip("/")
-    session_cookie = request.POST.get("session_cookie", "").strip()
+    substack_sid = request.POST.get("substack_sid", "").strip()
+    connect_sid = request.POST.get("connect_sid", "").strip()
 
-    if not publication_url or not session_cookie:
-        messages.error(request, "Publication URL and session cookie are required.")
+    if not publication_url or not substack_sid or not connect_sid:
+        messages.error(request, "Publication URL and both session cookies are required.")
         return render(
             request,
             "social_accounts/substack_connect.html",
@@ -655,12 +657,13 @@ def connect_substack(request, workspace_id):
             request.org.id,
             publication_url=publication_url,
         )
-        profile = provider.get_profile(session_cookie)
+        session_cookies = json.dumps({"substack_sid": substack_sid, "connect_sid": connect_sid})
+        profile = provider.get_profile(session_cookies)
         _create_or_update_account(
             workspace_id=workspace_id,
             platform=PlatformCredential.Platform.SUBSTACK,
             profile=profile,
-            access_token=session_cookie,
+            access_token=session_cookies,
             instance_url=provider.publication_url,
         )
         messages.success(request, f"Connected {profile.name} on Substack.")

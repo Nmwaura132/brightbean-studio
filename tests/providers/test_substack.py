@@ -1,5 +1,6 @@
 """Tests for SubstackProvider (session-cookie auth, publishing)."""
 
+import json
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -17,6 +18,9 @@ def _make_response(payload: dict) -> MagicMock:
 
 def _provider(publication_url="https://example.substack.com") -> SubstackProvider:
     return SubstackProvider({"publication_url": publication_url})
+
+
+TOKEN = json.dumps({"substack_sid": "s%3Asub", "connect_sid": "s%3Acon"})
 
 
 class TestTextToDoc:
@@ -40,20 +44,27 @@ class TestOAuthStubs:
 
 
 class TestHeaders:
-    def test_builds_cookie_header_not_bearer(self):
-        headers = _provider()._headers("my-session-cookie")
+    def test_sends_both_session_cookies_not_bearer(self):
+        headers = _provider()._headers(TOKEN)
 
-        assert headers == {"Cookie": "connect.sid=my-session-cookie"}
+        assert headers == {"Cookie": "substack.sid=s%3Asub; connect.sid=s%3Acon"}
 
 
 class TestGetProfile:
     @patch.object(SubstackProvider, "_request")
     def test_parses_publication_info(self, mock_request):
         mock_request.return_value = _make_response(
-            {"publication": {"id": 42, "name": "My Newsletter", "subdomain": "example", "logo_url": "https://x/logo.png"}}
+            {
+                "publication": {
+                    "id": 42,
+                    "name": "My Newsletter",
+                    "subdomain": "example",
+                    "logo_url": "https://x/logo.png",
+                }
+            }
         )
 
-        profile = _provider().get_profile("cookie-value")
+        profile = _provider().get_profile(TOKEN)
 
         assert profile.platform_id == "42"
         assert profile.name == "My Newsletter"
@@ -64,33 +75,58 @@ class TestGetProfile:
         mock_request.return_value = _make_response({})
 
         with pytest.raises(OAuthError):
-            _provider().get_profile("cookie-value")
+            _provider().get_profile(TOKEN)
 
     def test_raises_when_publication_url_not_configured(self):
         provider = SubstackProvider({})
 
         with pytest.raises(PublishError, match="publication_url"):
-            provider.get_profile("cookie-value")
+            provider.get_profile(TOKEN)
 
 
 class TestPublishPost:
-    @patch.object(SubstackProvider, "_request")
-    def test_creates_draft_then_publishes_it(self, mock_request):
+    def _publish(self, mock_request):
         mock_request.side_effect = [
+            _make_response({"userSettings": [{"user_id": 7, "type": "x"}]}),
             _make_response({"id": 999}),
             _make_response({"id": 999, "canonical_url": "https://example.substack.com/p/my-post"}),
         ]
-
         content = PublishContent(title="My Post", text="body text", post_type=PostType.ARTICLE)
-        result = _provider().publish_post("cookie-value", content)
+        return _provider().publish_post(TOKEN, content)
 
-        assert mock_request.call_count == 2
-        first_call_url = mock_request.call_args_list[0].args[1]
-        second_call_url = mock_request.call_args_list[1].args[1]
-        assert first_call_url.endswith("/api/v1/drafts")
-        assert second_call_url.endswith("/api/v1/drafts/999/publish")
-        assert result.platform_post_id == "999"
+    @patch.object(SubstackProvider, "_request")
+    def test_publishes_created_draft(self, mock_request):
+        self._publish(mock_request)
+
+        assert mock_request.call_args_list[2].args[1].endswith("/api/v1/drafts/999/publish")
+
+    @patch.object(SubstackProvider, "_request")
+    def test_returns_published_url(self, mock_request):
+        result = self._publish(mock_request)
+
         assert result.url == "https://example.substack.com/p/my-post"
+
+    @patch.object(SubstackProvider, "_request")
+    def test_draft_bylines_use_own_user_id(self, mock_request):
+        self._publish(mock_request)
+
+        draft_payload = mock_request.call_args_list[1].kwargs["json"]
+        assert draft_payload["draft_bylines"] == [{"id": 7, "is_guest": False}]
+
+    @patch.object(SubstackProvider, "_request")
+    def test_draft_body_is_a_json_string(self, mock_request):
+        self._publish(mock_request)
+
+        draft_payload = mock_request.call_args_list[1].kwargs["json"]
+        assert json.loads(draft_payload["draft_body"])["type"] == "doc"
+
+    @patch.object(SubstackProvider, "_request")
+    def test_raises_when_user_settings_empty(self, mock_request):
+        mock_request.return_value = _make_response({"userSettings": []})
+        content = PublishContent(title="t", text="body", post_type=PostType.ARTICLE)
+
+        with pytest.raises(PublishError, match="user settings"):
+            _provider().publish_post(TOKEN, content)
 
     def test_requires_title(self):
         content = PublishContent(title="", text="body", post_type=PostType.ARTICLE)

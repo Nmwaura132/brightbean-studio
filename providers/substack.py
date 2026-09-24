@@ -4,23 +4,24 @@ Substack's own 2026 Developer API (see README) only does creator profile
 lookup; there is no first-party endpoint to publish a post. Everything below
 talks to the same internal JSON API (``https://<publication>.substack.com/api/v1/*``)
 the Substack web editor itself uses, authenticated with the operator's own
-browser session cookie (``connect.sid``) instead of OAuth — there is no OAuth
-app to register because Substack doesn't offer one.
+browser session cookies (``substack.sid`` and ``connect.sid``) instead of
+OAuth — there is no OAuth app to register because Substack doesn't offer one.
 
 This is real risk, not a formality: Substack can change or break these
 endpoints without notice, and it's tied to a real person's actual account, not
-an app-scoped token. The endpoint paths and request/response shapes below are
-reconstructed from third-party reverse-engineering write-ups, NOT verified
-against a live Substack account — treat the first real publish as the actual
-test of whether this still matches Substack's current API, and expect to
-adjust field names if it doesn't.
+an app-scoped token. Request shapes (both cookies, JSON-string ``draft_body``,
+required ``draft_bylines``) follow jakub-k-slys/substack-gateway-oss, which is
+e2e-tested against live Substack; the immediate ``/publish`` call is not
+covered by that project, so treat the first real publish as its real test.
 
 Auth type is SESSION, matching Bluesky/DEV.to: no ``get_auth_url`` /
-``exchange_code`` — the operator pastes their session cookie directly.
+``exchange_code`` — the operator pastes their session cookies directly. The
+account's access_token holds both as JSON: ``{"substack_sid": ..., "connect_sid": ...}``.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 
 from .base import SocialProvider
@@ -109,13 +110,26 @@ class SubstackProvider(SocialProvider):
     # Helpers
     # ------------------------------------------------------------------
 
-    def _headers(self, session_cookie: str) -> dict[str, str]:
+    def _headers(self, access_token: str) -> dict[str, str]:
         # Not a Bearer token — Substack authenticates the same way its own
-        # browser editor does, via the session cookie. Built manually rather
+        # browser editor does, via session cookies. Built manually rather
         # than passed as `access_token=` to `_request` so the base class
         # doesn't also attach an `Authorization: Bearer` header Substack
         # doesn't expect.
-        return {"Cookie": f"connect.sid={session_cookie}"}
+        cookies = json.loads(access_token)
+        return {"Cookie": f"substack.sid={cookies['substack_sid']}; connect.sid={cookies['connect_sid']}"}
+
+    def _get_own_user_id(self, headers: dict[str, str]) -> int:
+        resp = self._request("GET", "https://substack.com/api/v1/user-settings", headers=headers)
+        body = resp.json()
+        settings = body.get("userSettings") or body.get("user_settings") or []
+        if not settings:
+            raise PublishError(
+                "Substack returned no user settings — the session cookies may have expired.",
+                platform=self.platform_name,
+                raw_response=body,
+            )
+        return settings[0]["user_id"]
 
     def _require_publication_url(self) -> str:
         if not self.publication_url:
@@ -181,11 +195,13 @@ class SubstackProvider(SocialProvider):
 
         publication_url = self._require_publication_url()
         headers = self._headers(access_token)
+        user_id = self._get_own_user_id(headers)
 
         draft_payload = {
             "draft_title": content.title,
             "draft_subtitle": content.description or "",
-            "draft_body": _text_to_doc(content.text[:MAX_BODY_LENGTH]),
+            "draft_body": json.dumps(_text_to_doc(content.text[:MAX_BODY_LENGTH]), ensure_ascii=False),
+            "draft_bylines": [{"id": user_id, "is_guest": False}],
             "type": "newsletter",
             "audience": "everyone",
         }
