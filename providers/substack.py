@@ -43,6 +43,16 @@ logger = logging.getLogger(__name__)
 MAX_BODY_LENGTH = 100_000
 
 
+# Substack rejects a long subtitle, and the publisher passes the whole caption as the
+# description, so only its first line becomes the subtitle.
+MAX_SUBTITLE_LENGTH = 150
+
+
+def _subtitle(description):
+    first_line = next((ln.strip() for ln in (description or "").splitlines() if ln.strip()), "")
+    return first_line[:MAX_SUBTITLE_LENGTH]
+
+
 def _text_to_doc(text: str) -> dict:
     """Convert plain text to Substack's ProseMirror-style draft_body doc.
 
@@ -201,7 +211,7 @@ class SubstackProvider(SocialProvider):
 
         draft_payload = {
             "draft_title": content.title,
-            "draft_subtitle": content.description or "",
+            "draft_subtitle": _subtitle(content.description),
             "draft_body": json.dumps(_text_to_doc(content.text[:MAX_BODY_LENGTH]), ensure_ascii=False),
             "draft_bylines": [{"id": user_id, "is_guest": False}],
             "type": "newsletter",

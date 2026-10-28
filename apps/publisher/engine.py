@@ -604,6 +604,8 @@ class PublishEngine:
         # 2. Platform defaults
         if platform == "pinterest":
             return PostType.PIN
+        if platform == "substack":
+            return PostType.ARTICLE
 
         # 3. Multi-media → CAROUSEL for Instagram/Threads
         if media_count > 1 and platform in (

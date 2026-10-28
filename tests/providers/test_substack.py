@@ -141,3 +141,26 @@ class TestPublishPost:
 
         with pytest.raises(PublishError):
             _provider().publish_post("cookie-value", content)
+
+
+class TestSubtitle:
+    def test_uses_only_the_first_line_of_a_long_caption(self):
+        from providers.substack import _subtitle
+
+        assert _subtitle("Headline here.\n\nA long body paragraph that must not become the subtitle.") == "Headline here."
+
+    def test_is_capped_in_length(self):
+        from providers.substack import MAX_SUBTITLE_LENGTH, _subtitle
+
+        assert len(_subtitle("x" * 1000)) == MAX_SUBTITLE_LENGTH
+
+    def test_empty_description_gives_empty_subtitle(self):
+        from providers.substack import _subtitle
+
+        assert _subtitle(None) == ""
+
+
+def test_publisher_defaults_substack_posts_to_article():
+    from apps.publisher.engine import PublishEngine
+
+    assert PublishEngine._resolve_post_type("substack", {}, 0, None) == PostType.ARTICLE
