@@ -300,6 +300,11 @@ CSP_FORM_ACTION = (
     "https://www.linkedin.com",
     "https://www.pinterest.com",
     "https://www.tiktok.com",
+    # Chromium enforces form-action across the redirect chain, so a connect form
+    # that 302s to an OAuth page the list lacks is silently dropped.
+    "https://x.com",
+    "https://twitter.com",
+    "https://www.reddit.com",
 )
 CSP_INCLUDE_NONCE_IN = ["script-src"]
 

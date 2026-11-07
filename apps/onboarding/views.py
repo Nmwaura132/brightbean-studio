@@ -277,7 +277,7 @@ def connection_page(request, token):
 
 
 @csp_update(
-    FORM_ACTION="'self' https://accounts.google.com https://www.facebook.com https://api.instagram.com https://www.instagram.com https://threads.net https://www.threads.com https://www.linkedin.com https://www.pinterest.com https://www.tiktok.com"
+    FORM_ACTION="'self' https://accounts.google.com https://www.facebook.com https://api.instagram.com https://www.instagram.com https://threads.net https://www.threads.com https://www.linkedin.com https://www.pinterest.com https://www.tiktok.com https://x.com https://twitter.com https://www.reddit.com"
 )
 @require_POST
 def connection_oauth_start(request, token):
