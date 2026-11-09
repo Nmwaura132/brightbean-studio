@@ -32,6 +32,47 @@ class TestTextToDoc:
         assert paragraphs[0]["content"][0]["text"] == "first line"
         assert paragraphs[1]["content"][0]["text"] == "second line"
 
+    def test_a_hash_line_becomes_a_heading(self):
+        doc = _text_to_doc("## 📊 Market today")
+
+        assert doc["content"][0] == {
+            "type": "heading",
+            "attrs": {"level": 3},
+            "content": [{"type": "text", "text": "📊 Market today"}],
+        }
+
+    def test_consecutive_bullet_lines_form_one_list(self):
+        doc = _text_to_doc("• KCB pays tomorrow\n• KPLC books close 27 November")
+
+        assert [len(node["content"]) for node in doc["content"]] == [2]
+
+    def test_a_bare_domain_becomes_a_link_without_the_full_stop(self):
+        doc = _text_to_doc("See your portfolio: heymara.co.ke.")
+
+        assert doc["content"][0]["content"][1] == {
+            "type": "text",
+            "text": "heymara.co.ke",
+            "marks": [{"type": "link", "attrs": {"href": "https://heymara.co.ke"}}],
+        }
+
+    def test_prices_are_not_links(self):
+        doc = _text_to_doc("NCBA closed at 89.00, up 3.26%.")
+
+        assert doc["content"][0]["content"] == [{"type": "text", "text": "NCBA closed at 89.00, up 3.26%."}]
+
+
+class TestBodyWithoutSubtitle:
+    def test_the_subtitle_line_is_not_repeated_in_the_body(self):
+        from providers.substack import _body_without_subtitle
+
+        assert _body_without_subtitle("A short dek.\nThe body.", "A short dek.") == "The body."
+
+    def test_a_first_line_cut_short_as_subtitle_stays_in_the_body(self):
+        from providers.substack import _body_without_subtitle
+
+        text = "x" * 200 + "\nThe body."
+        assert _body_without_subtitle(text, "x" * 150) == text
+
 
 class TestOAuthStubs:
     def test_get_auth_url_not_implemented(self):

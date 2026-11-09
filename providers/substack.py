@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from .base import SocialProvider
 from .exceptions import OAuthError, PublishError
@@ -53,19 +54,70 @@ def _subtitle(description):
     return first_line[:MAX_SUBTITLE_LENGTH]
 
 
-def _text_to_doc(text: str) -> dict:
-    """Convert plain text to Substack's ProseMirror-style draft_body doc.
+_HEADING = re.compile(r"^(#{1,3})\s+(\S.*)$")
+_BULLET = re.compile(r"^[•*-]\s+(\S.*)$")
+# A full URL, or a bare domain such as example.co.ke; the last character class
+# keeps a sentence's closing full stop out of the link.
+_WEB_ADDRESS = re.compile(
+    r"https?://[^\s<>]*[^\s<>.,;:!?)]"
+    r"|\b(?:[a-z0-9-]+\.)+(?:co\.ke|com|ke|io|net|org|app)\b(?:/[^\s<>]*[^\s<>.,;:!?)])?",
+    re.I,
+)
 
-    One paragraph node per non-empty line. This is the minimal-viable shape
-    cited across community reverse-engineering references — Substack's real
-    editor produces much richer nodes (headings, links, images, embeds), none
-    of which this builds.
+
+def _inline(text: str) -> list[dict]:
+    """Text nodes for one line, with web addresses made into links."""
+    nodes, pos = [], 0
+    for match in _WEB_ADDRESS.finditer(text):
+        if match.start() > pos:
+            nodes.append({"type": "text", "text": text[pos : match.start()]})
+        address = match.group(0)
+        href = address if address.lower().startswith("http") else f"https://{address}"
+        nodes.append({"type": "text", "text": address, "marks": [{"type": "link", "attrs": {"href": href}}]})
+        pos = match.end()
+    if pos < len(text):
+        nodes.append({"type": "text", "text": text[pos:]})
+    return nodes
+
+
+def _text_to_doc(text: str) -> dict:
+    """Convert text to Substack's ProseMirror-style draft_body doc.
+
+    Each non-empty line is a paragraph, except: a line starting "## " (or "# ",
+    "### ") is a heading, and consecutive lines starting with a bullet ("• ",
+    "- ", "* ") form one bullet list. Web addresses become links.
     """
-    paragraphs = [line for line in text.split("\n") if line.strip()] or [""]
-    return {
-        "type": "doc",
-        "content": [{"type": "paragraph", "content": [{"type": "text", "text": line}]} for line in paragraphs],
-    }
+    content, bullets = [], []
+
+    def close_list():
+        if bullets:
+            items = [{"type": "list_item", "content": [{"type": "paragraph", "content": _inline(b)}]} for b in bullets]
+            content.append({"type": "bullet_list", "content": items})
+            bullets.clear()
+
+    for line in (ln.strip() for ln in text.split("\n")):
+        if not line:
+            continue
+        bullet = _BULLET.match(line)
+        if bullet:
+            bullets.append(bullet.group(1))
+            continue
+        close_list()
+        heading = _HEADING.match(line)
+        if heading:
+            level = len(heading.group(1)) + 1
+            content.append({"type": "heading", "attrs": {"level": level}, "content": _inline(heading.group(2))})
+        else:
+            content.append({"type": "paragraph", "content": _inline(line)})
+    close_list()
+    return {"type": "doc", "content": content or [{"type": "paragraph"}]}
+
+
+def _body_without_subtitle(text: str, subtitle: str) -> str:
+    """The caption's first line is published as the subtitle, so the body starts
+    after it instead of repeating it."""
+    first, _, rest = text.strip().partition("\n")
+    return rest if subtitle and first.strip() == subtitle and rest.strip() else text
 
 
 class SubstackProvider(SocialProvider):
@@ -209,10 +261,12 @@ class SubstackProvider(SocialProvider):
         headers = self._headers(access_token)
         user_id = self._get_own_user_id(headers)
 
+        subtitle = _subtitle(content.description)
+        body = _body_without_subtitle(content.text, subtitle)
         draft_payload = {
             "draft_title": content.title,
-            "draft_subtitle": _subtitle(content.description),
-            "draft_body": json.dumps(_text_to_doc(content.text[:MAX_BODY_LENGTH]), ensure_ascii=False),
+            "draft_subtitle": subtitle,
+            "draft_body": json.dumps(_text_to_doc(body[:MAX_BODY_LENGTH]), ensure_ascii=False),
             "draft_bylines": [{"id": user_id, "is_guest": False}],
             "type": "newsletter",
             "audience": "everyone",
