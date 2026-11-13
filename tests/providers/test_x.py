@@ -30,7 +30,7 @@ class TestGetAuthUrl:
         url = _provider().get_auth_url("https://app.example/cb", "state-123")
 
         query = parse_qs(urlsplit(url).query)
-        assert query["scope"] == ["tweet.read tweet.write users.read offline.access"]
+        assert query["scope"] == ["tweet.read tweet.write users.read offline.access media.write"]
 
     def test_includes_standard_base64url_pkce_challenge(self):
         url = _provider().get_auth_url("https://app.example/cb", "state-123", code_verifier="verifier-xyz")
@@ -90,14 +90,33 @@ class TestPublishPost:
         assert result.platform_post_id == "12345"
         assert result.url == "https://x.com/i/web/status/12345"
 
-    def test_rejects_media_urls(self):
-        content = PublishContent(text="hi", post_type=PostType.TEXT, media_urls=["https://example.com/pic.jpg"])
+    @patch.object(XProvider, "_request")
+    def test_uploads_an_image_as_a_tweet_image(self, mock_request, tmp_path):
+        image = tmp_path / "card.png"
+        image.write_bytes(b"png-bytes")
+        mock_request.side_effect = [_make_response({"data": {"id": "m1"}}), _make_response({"data": {"id": "t1"}})]
 
-        with pytest.raises(PublishError):
-            _provider().publish_post("token", content)
+        _provider().publish_post("token", PublishContent(text="hi", post_type=PostType.IMAGE, media_files=[str(image)]))
 
-    def test_rejects_non_text_post_type(self):
-        content = PublishContent(text="hi", post_type=PostType.IMAGE)
+        upload = mock_request.call_args_list[0]
+        assert (upload.args[1], upload.kwargs["data"], upload.kwargs["files"]["media"][1]) == (
+            "https://api.x.com/2/media/upload",
+            {"media_category": "tweet_image"},
+            b"png-bytes",
+        )
+
+    @patch.object(XProvider, "_request")
+    def test_attaches_uploaded_images_to_the_tweet(self, mock_request, tmp_path):
+        image = tmp_path / "card.png"
+        image.write_bytes(b"png-bytes")
+        mock_request.side_effect = [_make_response({"data": {"id": "m1"}}), _make_response({"data": {"id": "t1"}})]
+
+        _provider().publish_post("token", PublishContent(text="hi", post_type=PostType.IMAGE, media_files=[str(image)]))
+
+        assert mock_request.call_args_list[1].kwargs["json"] == {"text": "hi", "media": {"media_ids": ["m1"]}}
+
+    def test_rejects_video_posts(self):
+        content = PublishContent(text="hi", post_type=PostType.VIDEO, media_files=["clip.mp4"])
 
         with pytest.raises(PublishError):
             _provider().publish_post("token", content)

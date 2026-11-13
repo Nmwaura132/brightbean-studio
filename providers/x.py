@@ -1,10 +1,9 @@
 """X (formerly Twitter) API v2 provider.
 
-Text-only publishing. X's v2 media upload (INIT/APPEND/FINALIZE, with async
-STATUS polling for video/GIF) is a materially different, harder-to-verify flow
-than the image endpoints other providers here use — rather than ship a guess at
-it, ``publish_post`` rejects media explicitly until it's built for real against
-a live app. See ``supported_media_types``.
+Text and image publishing. Images go up in one call to ``/2/media/upload``
+(``media_category=tweet_image``, 5 MB max). Video and GIF need the chunked
+INIT/APPEND/FINALIZE flow with async STATUS polling, which is not built, so
+``publish_post`` rejects them explicitly.
 
 Auth is OAuth 2.0 Authorization Code with PKCE (RFC 7636, standard base64url
 S256 — unlike TikTok, X does not deviate to hex). ``offline.access`` is
@@ -71,17 +70,17 @@ class XProvider(SocialProvider):
 
     @property
     def supported_post_types(self) -> list[PostType]:
-        return [PostType.TEXT]
+        return [PostType.TEXT, PostType.IMAGE]
 
     @property
     def supported_media_types(self) -> list[MediaType]:
-        # Empty on purpose — see module docstring. publish_post rejects media
-        # explicitly rather than silently dropping it.
-        return []
+        return [MediaType.IMAGE]
 
     @property
     def required_scopes(self) -> list[str]:
-        return ["tweet.read", "tweet.write", "users.read", "offline.access"]
+        # media.write: accounts connected before images were supported have to
+        # reconnect once to grant it.
+        return ["tweet.read", "tweet.write", "users.read", "offline.access", "media.write"]
 
     # ------------------------------------------------------------------
     # Helpers
@@ -195,16 +194,9 @@ class XProvider(SocialProvider):
     # ------------------------------------------------------------------
 
     def publish_post(self, access_token: str, content: PublishContent) -> PublishResult:
-        if content.post_type != PostType.TEXT:
+        if content.post_type not in (PostType.TEXT, PostType.IMAGE):
             raise PublishError(
-                f"X provider only supports TEXT posts (got {content.post_type})",
-                platform=self.platform_name,
-                retryable=False,
-            )
-        if content.media_urls or content.media_files:
-            raise PublishError(
-                "X media upload is not implemented yet — post text without media, "
-                "or attach media through X directly.",
+                f"X provider only supports TEXT and IMAGE posts (got {content.post_type})",
                 platform=self.platform_name,
                 retryable=False,
             )
@@ -214,12 +206,17 @@ class XProvider(SocialProvider):
         # auto-unfurls into a card), so unlike those providers there is nothing
         # to attach here beyond the caption itself.
         text = content.text[: self.max_caption_length]
+        payload: dict = {"text": text}
+        # X allows up to 4 images per post.
+        media_ids = [self._upload_image(access_token, path) for path in content.media_files[:4]]
+        if media_ids:
+            payload["media"] = {"media_ids": media_ids}
 
         resp = self._request(
             "POST",
             f"{API_BASE}/tweets",
             access_token=access_token,
-            json={"text": text},
+            json=payload,
         )
         body = resp.json()
         post_id = body.get("data", {}).get("id", "")
@@ -228,6 +225,21 @@ class XProvider(SocialProvider):
             url=f"https://x.com/i/web/status/{post_id}" if post_id else None,
             extra=body.get("data", {}),
         )
+
+    def _upload_image(self, access_token: str, path: str) -> str:
+        with open(path, "rb") as f:
+            image = f.read()
+        resp = self._request(
+            "POST",
+            f"{API_BASE}/media/upload",
+            access_token=access_token,
+            data={"media_category": "tweet_image"},
+            files={"media": (os.path.basename(path), image)},
+        )
+        media_id = resp.json().get("data", {}).get("id")
+        if not media_id:
+            raise PublishError("X media upload returned no media id", platform=self.platform_name, retryable=True)
+        return media_id
 
     def publish_comment(self, access_token: str, post_id: str, text: str) -> CommentResult:
         """Post a reply tweet under ``post_id`` — X has no separate comment object."""
